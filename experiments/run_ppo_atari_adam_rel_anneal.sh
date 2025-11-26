@@ -10,4 +10,3 @@ python experiments/ppo_atari_adam_rel.py \
   --learning_rate 2.0e-3 \
   --gae-lambda 0.90 \
   --max_grad_norm 5.0 \
-  --no-anneal_lr
