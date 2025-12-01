@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Frequencies to sweep. Edit this list to change the experiment points.
-FREQUENCIES=(5 10 20 40)
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
-# Common args shared by all runs; append extra flags when invoking this script.
-COMMON_ARGS=()
+# SOAP precondition frequency
+FREQUENCIES=(4 8 10 16 32 48 50 64 80 96 100)
 
-# Optional: set SEED via env var when invoking (defaults to 1).
-SEED="${SEED:-1}"
+SEED="${SEED:-0}"
+COMMON_ARGS=(
+  --env-id ale_py:BreakoutNoFrameskip-v4
+  --seed 0
+  --learning_rate 2.0e-3
+  --gae-lambda 0.90
+  --max_grad_norm 5.0
+)
 
 for freq in "${FREQUENCIES[@]}"; do
   echo "Running ppo_atari_soap_rel with precondition_frequency=${freq}"

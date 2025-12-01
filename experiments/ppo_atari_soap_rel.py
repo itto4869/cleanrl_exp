@@ -50,6 +50,8 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
+    soap_precondition_frequency: int = 10
+    """how often SOAP updates its preconditioner"""
     num_envs: int = 8
     """the number of parallel game environments"""
     num_steps: int = 128
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}_{args.exp_name}_{args.seed}_{args.soap_precondition_frequency}"
     if args.track:
         import wandb
 
@@ -189,7 +191,7 @@ if __name__ == "__main__":
         params=agent.parameters(),
         lr=args.learning_rate,
         normalize_grads=False,
-        precondition_frequency=10,
+        precondition_frequency=args.soap_precondition_frequency,
     )
 
     # ALGO Logic: Storage setup
