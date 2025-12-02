@@ -11,9 +11,6 @@ SEED="${SEED:-0}"
 COMMON_ARGS=(
   --env-id ale_py:BreakoutNoFrameskip-v4
   --seed 0
-  --learning_rate 2.5e-4
-  --gae-lambda 0.90
-  --max_grad_norm 0.5
 )
 
 for freq in "${FREQUENCIES[@]}"; do
