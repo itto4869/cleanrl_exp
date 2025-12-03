@@ -9,7 +9,7 @@ RUN_GROUP="ppo_default_soap_precond_sweep"
 export RUN_GROUP
 
 # SOAP precondition frequency
-FREQUENCIES=(4 8 10 16 32 48 50 64 80 96 100)
+FREQUENCIES=(10 32 48 50 64 80 96 100)
 
 SEED="${SEED:-0}"
 COMMON_ARGS=(
