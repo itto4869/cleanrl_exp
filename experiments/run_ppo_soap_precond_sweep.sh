@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Explicit log/video group for this sweep
+RUN_GROUP="ppo_soap_precond_sweep"
+export RUN_GROUP
+
 # SOAP precondition frequency
 FREQUENCIES=(4 8 10 16 32 48 50 64 80 96 100)
 

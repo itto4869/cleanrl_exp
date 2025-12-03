@@ -75,6 +75,14 @@ class SOAP(optim.Optimizer):
         }
         super().__init__(params, defaults)
         self._data_format = data_format
+
+    def _get_precondition_step(self, state):
+        """
+        Returns the step value used to decide when to recompute the preconditioner.
+        Subclasses can override this to decouple the bias-correction step from the
+        preconditioner update schedule.
+        """
+        return state["step"]
         
     def merge_dims(self, grad, max_precond_dim):
         """
@@ -149,7 +157,8 @@ class SOAP(optim.Optimizer):
                     self.update_preconditioner(grad, state,
                                                max_precond_dim=group['max_precond_dim'],
                                                merge_dims=group["merge_dims"],
-                                               precondition_1d=group["precondition_1d"])
+                                               precondition_1d=group["precondition_1d"],
+                                               precondition_step=self._get_precondition_step(state))
                     continue # first step is skipped so that we never use the current gradients in the projection.
                 
                 # Projecting gradients to the eigenbases of Shampoo's preconditioner 
@@ -161,6 +170,10 @@ class SOAP(optim.Optimizer):
                 beta1, beta2 = group["betas"]
 
                 state["step"] += 1
+
+                step_for_bias = state["step"]
+                if isinstance(step_for_bias, torch.Tensor):
+                    step_for_bias = step_for_bias.item()
 
                 # Decay the first and second moment running average coefficient
                 # In-place operations to update the averages at the same time
@@ -177,8 +190,8 @@ class SOAP(optim.Optimizer):
                 
                 step_size = group["lr"]
                 if group["correct_bias"]:
-                    bias_correction1 = 1.0 - beta1 ** (state["step"])
-                    bias_correction2 = 1.0 - beta2 ** (state["step"])
+                    bias_correction1 = 1.0 - beta1 ** (step_for_bias)
+                    bias_correction2 = 1.0 - beta2 ** (step_for_bias)
                     step_size = step_size * (bias_correction2 ** .5) / bias_correction1
 
                 # Projecting back the preconditioned (by Adam) exponential moving average of gradients
@@ -208,7 +221,8 @@ class SOAP(optim.Optimizer):
                 self.update_preconditioner(grad, state, 
                                                max_precond_dim=group['max_precond_dim'],
                                                merge_dims=group["merge_dims"],
-                                               precondition_1d=group["precondition_1d"])
+                                               precondition_1d=group["precondition_1d"],
+                                               precondition_step=self._get_precondition_step(state))
         
         return loss
     
@@ -267,10 +281,16 @@ class SOAP(optim.Optimizer):
         return grad
         
     def update_preconditioner(self, grad, state, 
-                              max_precond_dim=10000, merge_dims=False, precondition_1d=False):
+                              max_precond_dim=10000, merge_dims=False, precondition_1d=False,
+                              precondition_step=None):
         """
         Updates the preconditioner matrices and the eigenbases (L, R, Q_L, Q_R in the paper).
         """
+        if precondition_step is None:
+            precondition_step = state.get("step", 0)
+        if isinstance(precondition_step, torch.Tensor):
+            precondition_step = int(precondition_step.item())
+
         if state["Q"] is not None:
             state["exp_avg"] = self.project_back(state["exp_avg"], state, merge_dims=merge_dims, max_precond_dim=max_precond_dim)
         if grad.dim() == 1:
@@ -300,11 +320,11 @@ class SOAP(optim.Optimizer):
                      
         if state['Q'] is None:
             state['Q'] = self.get_orthogonal_matrix(state['GG'])
-        if state['step'] > 0 and state['step'] % state['precondition_frequency'] == 0:
+        if precondition_step > 0 and precondition_step % state['precondition_frequency'] == 0:
             state['Q'] = self.get_orthogonal_matrix_QR(state, max_precond_dim, merge_dims)
             # state['Q'] = self.get_fast_QR(state, max_precond_dim, merge_dims)             
 
-        if state["step"] > 0:
+        if precondition_step > 0:
             state["exp_avg"] = self.project(state["exp_avg"], state, merge_dims=merge_dims, max_precond_dim=max_precond_dim) 
 
     def project_back(self, grad, state, merge_dims=False, max_precond_dim=10000):
@@ -431,4 +451,53 @@ class SOAP(optim.Optimizer):
         state['exp_avg_sq'] = exp_avg_sq
         return final
     
+class SOAPRel(SOAP):
+    """
+    SOAP-Rel variant with a separate global timestep for preconditioner updates.
+    `state["step"]` continues to drive Adam-style bias correction, while
+    `global_step` counts optimizer steps and is used to decide when to update
+    the preconditioner.
+    """
+
+    def __init__(
+        self,
+        params,
+        lr: float = 3e-3,
+        betas=(0.95, 0.95),
+        shampoo_beta: float= -1,
+        eps: float = 1e-8,
+        weight_decay: float = 0.01,
+        precondition_frequency: int=10,
+        max_precond_dim: int=10000,
+        merge_dims: bool = False,
+        precondition_1d: bool = False,
+        normalize_grads: bool = False,
+        data_format: str = "channels_first",
+        correct_bias: bool = True,
+    ):
+        super().__init__(
+            params=params,
+            lr=lr,
+            betas=betas,
+            shampoo_beta=shampoo_beta,
+            eps=eps,
+            weight_decay=weight_decay,
+            precondition_frequency=precondition_frequency,
+            max_precond_dim=max_precond_dim,
+            merge_dims=merge_dims,
+            precondition_1d=precondition_1d,
+            normalize_grads=normalize_grads,
+            data_format=data_format,
+            correct_bias=correct_bias,
+        )
+        self.global_step = -1
+
+    def _get_precondition_step(self, state):
+        state["global_step"] = self.global_step
+        return self.global_step
+
+    @torch.no_grad()
+    def step(self, closure = None):
+        self.global_step += 1
+        return super().step(closure=closure)
     
