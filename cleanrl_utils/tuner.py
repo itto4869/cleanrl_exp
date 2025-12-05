@@ -94,7 +94,9 @@ class Tuner:
                     if str(project_root) not in sys.path:
                         sys.path.insert(0, str(project_root))
 
-                    sys.argv = algo_command + [f"--env-id={env_id}", f"--seed={seed}"]
+                    # sys.argv[0] is treated as the program name; prepend a dummy entry so
+                    # tyro/argparse style parsers see all flags in sys.argv[1:].
+                    sys.argv = ["tuner"] + algo_command + [f"--env-id={env_id}", f"--seed={seed}"]
                     with HiddenPrints():
                         experiment = runpy.run_path(path_name=self.script, run_name="__main__")
 
