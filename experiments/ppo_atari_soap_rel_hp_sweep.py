@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass
 import os
+import time
 
 import optuna
 import tyro
@@ -15,7 +16,7 @@ class SweepArgs:
     total_timesteps: int = 2_000_000
     metric_last_n_average_window: int = 20
     study_name: str = "ppo_atari_soap_rel_hp_sweep"
-    storage: str = "sqlite:///ppo_atari_soap_rel_hp_sweep.db"
+    storage: str = ""
     env_id: str = "ale_py:BreakoutNoFrameskip-v4"
     use_wandb: bool = False
     wandb_project_name: str = "cleanRL"
@@ -52,6 +53,9 @@ def main():
     # Save under runs/soap_sweep/<run_name>
     os.environ["RUN_GROUP"] = "soap_sweep"
 
+    # Generate a unique storage path if none is provided to avoid collisions.
+    storage = args.storage or f"sqlite:///{args.study_name}_{int(time.time())}.db"
+
     wandb_kwargs = {}
     if args.use_wandb:
         wandb_kwargs = {
@@ -70,7 +74,7 @@ def main():
         metric_last_n_average_window=args.metric_last_n_average_window,
         sampler=optuna.samplers.TPESampler(multivariate=True),
         pruner=optuna.pruners.MedianPruner(n_startup_trials=3),
-        storage=args.storage,
+        storage=storage,
         study_name=args.study_name,
         wandb_kwargs=wandb_kwargs,
     )
