@@ -49,8 +49,8 @@ def build_params_fn(args: SweepArgs):
 def main():
     args = tyro.cli(SweepArgs)
 
-    # Flatten the tensorboard log path so the tuner can find runs/<run_name>
-    os.environ["RUN_GROUP"] = ""
+    # Save under runs/soap_sweep/<run_name>
+    os.environ["RUN_GROUP"] = "soap_sweep"
 
     wandb_kwargs = {}
     if args.use_wandb:
