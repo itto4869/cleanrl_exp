@@ -82,12 +82,14 @@ dev = ["pre-commit>=2.20.0,<3"]
 include = [
     "cleanrl",
     "cleanrl_utils",
+    "experiments",
 ]
 
 [tool.hatch.build.targets.wheel]
 include = [
     "cleanrl",
     "cleanrl_utils",
+    "experiments",
 ]
 
 [build-system]
