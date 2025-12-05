@@ -2,6 +2,7 @@ import os
 import runpy
 import sys
 import time
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
@@ -87,6 +88,12 @@ class Tuner:
             for seed in range(num_seeds):
                 normalized_scores = []
                 for env_id in self.target_scores.keys():
+                    # Ensure project root is on sys.path for relative imports inside the target script.
+                    script_path = Path(self.script).resolve()
+                    project_root = script_path.parent.parent
+                    if str(project_root) not in sys.path:
+                        sys.path.insert(0, str(project_root))
+
                     sys.argv = algo_command + [f"--env-id={env_id}", f"--seed={seed}"]
                     with HiddenPrints():
                         experiment = runpy.run_path(path_name=self.script, run_name="__main__")
