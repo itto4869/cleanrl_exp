@@ -26,7 +26,8 @@ class SweepArgs:
 def build_params_fn(args: SweepArgs):
     def params(trial: optuna.Trial):
         return {
-            "exp-name": "ppo_atari_soap_rel_hp_sweep",
+            # Make exp-name unique per trial to avoid run_dir collisions.
+            "exp-name": f"ppo_atari_soap_rel_hp_sweep_t{trial.number}",
             "total-timesteps": args.total_timesteps,
             # Fixed baselines
             "num-envs": 8,
