@@ -1,0 +1,57 @@
+[
+  {
+    "trial_number": 15,
+    "value": 221.16666666666666,
+    "params": {
+      "learning-rate": 0.0006611953820582676,
+      "gae-lambda": 0.9184473450216996,
+      "max-grad-norm": 2.6207779303503593,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0006611953820582676 --gae-lambda 0.9184473450216996 --max-grad-norm 2.6207779303503593 --soap-precondition-frequency 16"
+  },
+  {
+    "trial_number": 13,
+    "value": 217.63333333333333,
+    "params": {
+      "learning-rate": 0.0005916422531175177,
+      "gae-lambda": 0.9177405063398363,
+      "max-grad-norm": 1.4804642911973782,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0005916422531175177 --gae-lambda 0.9177405063398363 --max-grad-norm 1.4804642911973782 --soap-precondition-frequency 16"
+  },
+  {
+    "trial_number": 12,
+    "value": 187.13333333333335,
+    "params": {
+      "learning-rate": 0.0006773885525351273,
+      "gae-lambda": 0.92470053625365,
+      "max-grad-norm": 1.2767750096105,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0006773885525351273 --gae-lambda 0.92470053625365 --max-grad-norm 1.2767750096105 --soap-precondition-frequency 16"
+  },
+  {
+    "trial_number": 8,
+    "value": 165.65,
+    "params": {
+      "learning-rate": 0.0005848572617646431,
+      "gae-lambda": 0.9373233375774854,
+      "max-grad-norm": 1.3281200762438599,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0005848572617646431 --gae-lambda 0.9373233375774854 --max-grad-norm 1.3281200762438599 --soap-precondition-frequency 16"
+  },
+  {
+    "trial_number": 18,
+    "value": 149.91666666666666,
+    "params": {
+      "learning-rate": 0.0005700215535012004,
+      "gae-lambda": 0.9286646040661557,
+      "max-grad-norm": 2.5751475002436415,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0005700215535012004 --gae-lambda 0.9286646040661557 --max-grad-norm 2.5751475002436415 --soap-precondition-frequency 16"
+  }
+]
