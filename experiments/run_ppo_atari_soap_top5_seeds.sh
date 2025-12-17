@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-RUN_GROUP="soap_top5_seed_sweep"
+RUN_GROUP="soap_default_top5_seed_sweep"
 export RUN_GROUP
 
 # JSON input: list of objects with trial_number and params (learning-rate, gae-lambda, max-grad-norm, soap-precondition-frequency)
