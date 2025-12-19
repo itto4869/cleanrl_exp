@@ -68,7 +68,7 @@ def main():
 
     seeds = parse_seeds(args.seeds)
     run_env = os.environ.copy()
-    run_env.setdefault("RUN_GROUP", "config_sweep")
+    base_run_group = run_env.setdefault("RUN_GROUP", "config_sweep")
 
     for key, script in scripts.items():
         params = config[key]
@@ -87,6 +87,7 @@ def main():
         ]
         for env_id in config["envs"]:
             for seed in seeds:
+                run_env["RUN_GROUP"] = os.path.join(base_run_group, key)
                 cmd = [
                     sys.executable,
                     script,
