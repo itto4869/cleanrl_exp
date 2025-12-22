@@ -36,7 +36,6 @@ def build_params_fn(args: SweepArgs):
             "update-epochs": 4,
             "clip-coef": 0.1,
             "ent-coef": 0.01,
-            "anneal-lr": False,
             # Sweep targets
             "learning-rate": trial.suggest_float("learning-rate", 5e-4, 3e-3, log=True),
             "gae-lambda": trial.suggest_float("gae-lambda", 0.90, 0.98),
@@ -67,7 +66,7 @@ def main():
         }
 
     tuner = Tuner(
-        script="experiments/ppo_atari_soap_rel.py",
+        script="experiments/ppo_atari_soap_rel_no_anneal.py",
         metric="charts/episodic_return",
         target_scores={args.env_id: None},
         params_fn=build_params_fn(args),
