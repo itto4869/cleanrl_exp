@@ -1,0 +1,57 @@
+[
+  {
+    "trial_number": 9,
+    "value": 13586.875,
+    "params": {
+      "learning-rate": 0.0005240940728624487,
+      "gae-lambda": 0.9546846969480479,
+      "max-grad-norm": 3.6340260575207752,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0005240940728624487 --gae-lambda 0.9546846969480479 --max-grad-norm 3.6340260575207752 --soap-precondition-frequency 16"
+  },
+  {
+    "trial_number": 13,
+    "value": 12684.375,
+    "params": {
+      "learning-rate": 0.0005180578841270807,
+      "gae-lambda": 0.949927109545178,
+      "max-grad-norm": 3.4781061415584618,
+      "soap-precondition-frequency": 32
+    },
+    "cli_args": "--learning-rate 0.0005180578841270807 --gae-lambda 0.949927109545178 --max-grad-norm 3.4781061415584618 --soap-precondition-frequency 32"
+  },
+  {
+    "trial_number": 6,
+    "value": 12187.5,
+    "params": {
+      "learning-rate": 0.000525111067139723,
+      "gae-lambda": 0.9543129139745018,
+      "max-grad-norm": 2.6301442498354626,
+      "soap-precondition-frequency": 32
+    },
+    "cli_args": "--learning-rate 0.000525111067139723 --gae-lambda 0.9543129139745018 --max-grad-norm 2.6301442498354626 --soap-precondition-frequency 32"
+  },
+  {
+    "trial_number": 2,
+    "value": 10823.125,
+    "params": {
+      "learning-rate": 0.0005459105735315376,
+      "gae-lambda": 0.9482126445273522,
+      "max-grad-norm": 1.3108687982612734,
+      "soap-precondition-frequency": 32
+    },
+    "cli_args": "--learning-rate 0.0005459105735315376 --gae-lambda 0.9482126445273522 --max-grad-norm 1.3108687982612734 --soap-precondition-frequency 32"
+  },
+  {
+    "trial_number": 5,
+    "value": 9217.5,
+    "params": {
+      "learning-rate": 0.0008222390284189101,
+      "gae-lambda": 0.929205591647434,
+      "max-grad-norm": 2.35670962931926,
+      "soap-precondition-frequency": 16
+    },
+    "cli_args": "--learning-rate 0.0008222390284189101 --gae-lambda 0.929205591647434 --max-grad-norm 2.35670962931926 --soap-precondition-frequency 16"
+  }
+]
