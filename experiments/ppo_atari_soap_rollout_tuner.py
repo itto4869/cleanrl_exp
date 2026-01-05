@@ -30,7 +30,8 @@ def normalize_bool_flags(argv):
 
 def main():
     sys.argv = normalize_bool_flags(sys.argv)
-    runpy.run_path("experiments/ppo_atari_soap_rollout.py", run_name="__main__")
+    result = runpy.run_path("experiments/ppo_atari_soap_rollout.py", run_name="__main__")
+    globals().update(result)
 
 
 if __name__ == "__main__":
