@@ -65,7 +65,7 @@ def main():
         }
 
     tuner = Tuner(
-        script="experiments/ppo_atari_soap_rollout.py",
+        script="experiments/ppo_atari_soap_rollout_tuner.py",
         metric="charts/episodic_return",
         target_scores={args.env_id: None},
         params_fn=build_params_fn(args),
