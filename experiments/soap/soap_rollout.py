@@ -73,15 +73,16 @@ class SOAPRollout(SOAP):
                         max_precond_dim=group["max_precond_dim"],
                     )
 
-                self.init_preconditioner(
-                    grad,
-                    state,
-                    precondition_frequency=group["precondition_frequency"],
-                    precondition_1d=group["precondition_1d"],
-                    shampoo_beta=(group["shampoo_beta"] if group["shampoo_beta"] >= 0 else group["betas"][1]),
-                    max_precond_dim=group["max_precond_dim"],
-                    merge_dims=group["merge_dims"],
-                )
+                if state.get("GG") is None or state.get("Q") is None:
+                    self.init_preconditioner(
+                        grad,
+                        state,
+                        precondition_frequency=group["precondition_frequency"],
+                        precondition_1d=group["precondition_1d"],
+                        shampoo_beta=(group["shampoo_beta"] if group["shampoo_beta"] >= 0 else group["betas"][1]),
+                        max_precond_dim=group["max_precond_dim"],
+                        merge_dims=group["merge_dims"],
+                    )
 
                 self.update_preconditioner(
                     grad,
@@ -155,8 +156,13 @@ class SOAPRollout(SOAP):
                     max_precond_dim=group["max_precond_dim"],
                 )
 
+
                 if group["normalize_grads"]:
                     norm_grad = norm_grad / (1e-6 + torch.mean(norm_grad**2) ** 0.5)
+                    
+                # inside SOAPRollout.step(), after norm_grad computed
+                state["last_update_norm"] = norm_grad.norm().detach()
+                state["last_update_rms"]  = (norm_grad.pow(2).mean().sqrt()).detach()
 
                 p.add_(norm_grad, alpha=-step_size)
 

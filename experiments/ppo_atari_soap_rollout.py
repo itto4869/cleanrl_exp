@@ -235,6 +235,15 @@ if __name__ == "__main__":
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            # --- extra rollout diagnostics ---
+            writer.add_scalar("rollout/terminations_rate", np.mean(terminations), global_step)
+            writer.add_scalar("rollout/truncations_rate", np.mean(truncations), global_step)
+            writer.add_scalar("rollout/done_rate", np.mean(np.logical_or(terminations, truncations)), global_step)
+
+            writer.add_scalar("rollout/reward_mean", float(np.mean(reward)), global_step)
+            writer.add_scalar("rollout/reward_std", float(np.std(reward)), global_step)
+            writer.add_scalar("rollout/reward_nonzero_rate", float(np.mean(np.array(reward) != 0)), global_step)
+
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
@@ -261,6 +270,24 @@ if __name__ == "__main__":
                 delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
                 advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + values
+        
+        # --- target diagnostics ---
+        td_delta = returns - values  # not exactly delta, but useful scale check
+        writer.add_scalar("targets/adv_mean", advantages.mean().item(), global_step)
+        writer.add_scalar("targets/adv_std", advantages.std().item(), global_step)
+        writer.add_scalar("targets/adv_absmax", advantages.abs().max().item(), global_step)
+
+        writer.add_scalar("targets/ret_mean", returns.mean().item(), global_step)
+        writer.add_scalar("targets/ret_std", returns.std().item(), global_step)
+        writer.add_scalar("targets/ret_absmax", returns.abs().max().item(), global_step)
+
+        writer.add_scalar("targets/val_pred_mean_old", values.mean().item(), global_step)
+        writer.add_scalar("targets/val_pred_absmax_old", values.abs().max().item(), global_step)
+
+        writer.add_scalar("targets/td_like_mean", td_delta.mean().item(), global_step)
+        writer.add_scalar("targets/td_like_std", td_delta.std().item(), global_step)
+        writer.add_scalar("targets/td_like_absmax", td_delta.abs().max().item(), global_step)
+
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
@@ -307,23 +334,6 @@ if __name__ == "__main__":
         b_inds = np.arange(args.batch_size)
         clipfracs = []
 
-        # Reset Adam timestep (bias correction); preconditioner is fixed per rollout
-        for group in optimizer.param_groups:
-            for p in group["params"]:
-                state = optimizer.state.get(p)
-                if not state:
-                    continue
-
-                step = state.get("step", None)
-                if isinstance(step, torch.Tensor):
-                    step.zero_()
-                else:
-                    state["step"] = torch.tensor(
-                        float(step) if step is not None else 0.0,
-                        dtype=torch.float32,
-                        device=p.device if getattr(group, "capturable", False) or getattr(group, "fused", False) else "cpu",
-                    )
-
         for epoch in range(args.update_epochs):
             stop_update = False
             np.random.shuffle(b_inds)
@@ -367,18 +377,71 @@ if __name__ == "__main__":
 
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+                
+                writer.add_scalar("sanity/loss_isfinite", float(torch.isfinite(loss).all().item()), global_step)
+                writer.add_scalar("sanity/value_isfinite", float(torch.isfinite(newvalue).all().item()), global_step)
+                writer.add_scalar("sanity/logprob_isfinite", float(torch.isfinite(newlogprob).all().item()), global_step)
+
 
                 optimizer.zero_grad()
                 loss.backward()
+                # --- grad norm (pre-clip) ---
+                total_norm_sq = 0.0
+                for p in agent.parameters():
+                    if p.grad is None:
+                        continue
+                    param_norm = p.grad.data.norm(2)
+                    total_norm_sq += param_norm.item() ** 2
+                grad_norm_preclip = total_norm_sq ** 0.5
+                writer.add_scalar("update/grad_norm_preclip", grad_norm_preclip, global_step)
+
+                writer.add_scalar("update/grad_norm_postclip", min(grad_norm_preclip, args.max_grad_norm), global_step)
+
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                
+                # --- param delta norm ---
+                with torch.no_grad():
+                    params_before = [p.detach().clone() for p in agent.parameters()]
                 optimizer.step()
+                with torch.no_grad():
+                    delta_sq = 0.0
+                    for p0, p1 in zip(params_before, agent.parameters()):
+                        d = (p1.detach() - p0)
+                        delta_sq += d.pow(2).sum().item()
+                    writer.add_scalar("update/delta_param_l2", delta_sq ** 0.5, global_step)
 
                 if args.target_kl is not None and approx_kl > args.target_kl:
                     stop_update = True
                     break
+                
+                # after optimizer.step()
+                p0 = next(iter(optimizer.param_groups[0]["params"]))
+                st = optimizer.state[p0]
+                if "last_update_norm" in st:
+                    writer.add_scalar("update/update_norm_postprecond", st["last_update_norm"].item(), global_step)
+                    writer.add_scalar("update/update_rms_postprecond",  st["last_update_rms"].item(), global_step)
+
 
             if stop_update:
                 break
+        
+        # explained variance (old: from rollout-time values)
+        y_true = b_returns.cpu().numpy()
+        y_pred_old = b_values.cpu().numpy()
+        var_y = np.var(y_true)
+        explained_var_old = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred_old) / var_y
+        writer.add_scalar("losses/explained_variance_old", explained_var_old, global_step)
+
+        # explained variance (new: after updates)
+        with torch.no_grad():
+            v_pred_new = agent.get_value(b_obs).view(-1)
+        y_pred_new = v_pred_new.cpu().numpy()
+        explained_var_new = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred_new) / var_y
+        writer.add_scalar("losses/explained_variance_new", explained_var_new, global_step)
+
+        writer.add_scalar("critic/v_pred_absmax_new", float(np.max(np.abs(y_pred_new))), global_step)
+        writer.add_scalar("critic/v_pred_mean_new", float(np.mean(y_pred_new)), global_step)
+
 
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
