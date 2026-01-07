@@ -170,3 +170,29 @@ class SOAPRollout(SOAP):
                     p.add_(p, alpha=(-group["lr"] * group["weight_decay"]))
 
         return loss
+
+
+class SOAPRolloutResetStats(SOAPRollout):
+    """
+    SOAP rollout variant that resets optimizer statistics each rollout
+    while keeping the preconditioner.
+    """
+
+    @torch.no_grad()
+    def reset_rollout_stats(self):
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state.get(p)
+                if not state:
+                    continue
+                if "exp_avg" in state:
+                    state["exp_avg"].zero_()
+                if "exp_avg_sq" in state:
+                    state["exp_avg_sq"].zero_()
+                if "step" in state:
+                    state["step"] = 0
+
+    @torch.no_grad()
+    def update_preconditioner_from_grads(self):
+        super().update_preconditioner_from_grads()
+        self.reset_rollout_stats()

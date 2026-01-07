@@ -20,7 +20,7 @@ from cleanrl_utils.atari_wrappers import (  # isort:skip
     NoopResetEnv,
 )
 
-from soap.soap_rollout import SOAPRolloutResetStats
+from soap.soap_rollout import SOAPRollout
 
 
 @dataclass
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
-    optimizer = SOAPRolloutResetStats(
+    optimizer = SOAPRollout(
         params=agent.parameters(),
         lr=args.learning_rate,
         normalize_grads=args.soap_normalize_grads,

@@ -1,0 +1,52 @@
+[
+  {
+    "trial_number": 15,
+    "value": 14081.875,
+    "params": {
+      "learning-rate": 0.0002782101058189395,
+      "gae-lambda": 0.9360088469484982,
+      "max-grad-norm": 0.520339254811776
+    },
+    "cli_args": "--learning-rate 0.0002782101058189395 --gae-lambda 0.9360088469484982 --max-grad-norm 0.520339254811776"
+  },
+  {
+    "trial_number": 0,
+    "value": 12498.75,
+    "params": {
+      "learning-rate": 0.0001561846550647144,
+      "gae-lambda": 0.9407041516007466,
+      "max-grad-norm": 1.7867061816556524
+    },
+    "cli_args": "--learning-rate 0.0001561846550647144 --gae-lambda 0.9407041516007466 --max-grad-norm 1.7867061816556524"
+  },
+  {
+    "trial_number": 14,
+    "value": 11273.125,
+    "params": {
+      "learning-rate": 0.00017609050257542814,
+      "gae-lambda": 0.9369092714635198,
+      "max-grad-norm": 0.569329249541501
+    },
+    "cli_args": "--learning-rate 0.00017609050257542814 --gae-lambda 0.9369092714635198 --max-grad-norm 0.569329249541501"
+  },
+  {
+    "trial_number": 1,
+    "value": 9857.5,
+    "params": {
+      "learning-rate": 0.0001014180974421562,
+      "gae-lambda": 0.9327601192462419,
+      "max-grad-norm": 4.757597300057106
+    },
+    "cli_args": "--learning-rate 0.0001014180974421562 --gae-lambda 0.9327601192462419 --max-grad-norm 4.757597300057106"
+  },
+  {
+    "trial_number": 3,
+    "value": 7857.5,
+    "params": {
+      "learning-rate": 0.0002964169763722117,
+      "gae-lambda": 0.9514812290024215,
+      "max-grad-norm": 2.27742501988417
+    },
+    "cli_args": "--learning-rate 0.0002964169763722117 --gae-lambda 0.9514812290024215 --max-grad-norm 2.27742501988417"
+  }
+]
