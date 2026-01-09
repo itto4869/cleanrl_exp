@@ -1,0 +1,19 @@
+{
+    "soap-rollout": {
+        "learning-rate": 0.0001561846550647144,
+        "gae-lambda": 0.9407041516007466,
+        "max-grad-norm": 1.7867061816556524
+    },
+    "envs": [
+        "ale_py:AmidarNoFrameskip-v4", 
+        "ale_py:BowlingNoFrameskip-v4", 
+        "ale_py:FrostbiteNoFrameskip-v4", 
+        "ale_py:KungFuMasterNoFrameskip-v4", 
+        "ale_py:RiverraidNoFrameskip-v4",
+        "ale_py:BattleZoneNoFrameskip-v4", 
+        "ale_py:DoubleDunkNoFrameskip-v4", 
+        "ale_py:NameThisGameNoFrameskip-v4", 
+        "ale_py:PhoenixNoFrameskip-v4", 
+        "ale_py:QbertNoFrameskip-v4"
+    ]
+}
