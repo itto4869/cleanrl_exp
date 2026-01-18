@@ -1,4 +1,5 @@
 import torch
+from itertools import chain
 
 from experiments.soap.soap import SOAP
 
@@ -93,6 +94,95 @@ class SOAPRollout(SOAP):
                     precondition_step=group["precondition_frequency"],
                 )
 
+    def update_preconditioner(
+        self,
+        grad,
+        state,
+        max_precond_dim=10000,
+        merge_dims=False,
+        precondition_1d=False,
+        precondition_step=None,
+    ):
+        """
+        Updates the preconditioner matrices and the eigenbases (L, R, Q_L, Q_R in the paper).
+        Overridden to include trace normalization.
+        """
+        if precondition_step is None:
+            precondition_step = state.get("step", 0)
+        if isinstance(precondition_step, torch.Tensor):
+            precondition_step = int(precondition_step.item())
+
+        if state["Q"] is not None:
+            state["exp_avg"] = self.project_back(
+                state["exp_avg"],
+                state,
+                merge_dims=merge_dims,
+                max_precond_dim=max_precond_dim,
+            )
+        if grad.dim() == 1:
+            if precondition_1d and grad.shape[0] <= max_precond_dim:
+                state["GG"][0].lerp_(
+                    grad.unsqueeze(1) @ grad.unsqueeze(0), 1 - state["shampoo_beta"]
+                )
+        else:
+            if merge_dims:
+                new_grad = self.merge_dims(grad, max_precond_dim)
+                for idx, sh in enumerate(new_grad.shape):
+                    if sh <= max_precond_dim:
+                        outer_product = torch.tensordot(
+                            new_grad,
+                            new_grad,
+                            dims=[
+                                [
+                                    *chain(
+                                        range(idx), range(idx + 1, len(new_grad.shape))
+                                    )
+                                ]
+                            ]
+                            * 2,
+                        )
+                        state["GG"][idx].lerp_(outer_product, 1 - state["shampoo_beta"])
+            else:
+                for idx, sh in enumerate(grad.shape):
+                    if sh <= max_precond_dim:
+                        outer_product = torch.tensordot(
+                            grad,
+                            grad,
+                            # Contracts across all dimensions except for k.
+                            dims=[
+                                [*chain(range(idx), range(idx + 1, len(grad.shape)))]
+                            ]
+                            * 2,
+                        )
+                        state["GG"][idx].lerp_(outer_product, 1 - state["shampoo_beta"])
+
+        # --- Trace Normalization ---
+        for mat in state["GG"]:
+            if len(mat) > 0:
+                trace = torch.trace(mat)
+                if trace > 1e-12:
+                    mat.div_(trace)
+        # ---------------------------
+
+        if state["Q"] is None:
+            state["Q"] = self.get_orthogonal_matrix(state["GG"])
+        if (
+            precondition_step > 0
+            and precondition_step % state["precondition_frequency"] == 0
+        ):
+            state["Q"] = self.get_orthogonal_matrix_QR(
+                state, max_precond_dim, merge_dims
+            )
+            # state['Q'] = self.get_fast_QR(state, max_precond_dim, merge_dims)
+
+        if precondition_step > 0:
+            state["exp_avg"] = self.project(
+                state["exp_avg"],
+                state,
+                merge_dims=merge_dims,
+                max_precond_dim=max_precond_dim,
+            )
+
     @torch.no_grad()
     def step(self, closure=None):
         if closure is None:
@@ -163,8 +253,16 @@ class SOAPRollout(SOAP):
                 # inside SOAPRollout.step(), after norm_grad computed
                 state["last_update_norm"] = norm_grad.norm().detach()
                 state["last_update_rms"]  = (norm_grad.pow(2).mean().sqrt()).detach()
-
-                p.add_(norm_grad, alpha=-step_size)
+                
+                # --- Update Clipping (added) ---
+                update = -step_size * norm_grad
+                max_update_norm = 1.0  # Optional: Make this configurable
+                update_norm = update.norm()
+                if update_norm > max_update_norm:
+                    update = update * (max_update_norm / update_norm)
+                
+                p.add_(update)
+                # -------------------------------
 
                 if group["weight_decay"] > 0.0:
                     p.add_(p, alpha=(-group["lr"] * group["weight_decay"]))
