@@ -285,8 +285,8 @@ class SOAPRollout(SOAP):
 
 class SOAPRolloutMix(SOAPRollout):
     """
-    SOAP rollout variant that mixes rollout gradients with a persistent EMA of per-step gradients
-    when building the preconditioner.
+    SOAP rollout variant that mixes rollout preconditioner statistics (L/R)
+    with a persistent EMA of per-step preconditioner statistics.
     """
 
     def __init__(self, *args, grad_mix_ratio: float = 0.5, **kwargs):
@@ -296,71 +296,179 @@ class SOAPRolloutMix(SOAPRollout):
         self.grad_mix_ratio = grad_mix_ratio
 
     @torch.no_grad()
-    def update_preconditioner_from_grads(self):
-        """
-        Recompute the preconditioner from mixed gradients.
-        Mixes rollout gradients with EMA of per-step raw gradients.
-        """
-        self.rollout_step += 1
-        for group in self.param_groups:
-            if self.rollout_step % group["precondition_frequency"] != 0:
+    def _init_preconditioner_stats(self, grad, group):
+        gg = []
+        max_precond_dim = group["max_precond_dim"]
+        if grad.dim() == 1:
+            if not group["precondition_1d"] or grad.shape[0] > max_precond_dim:
+                gg.append([])
+            else:
+                gg.append(torch.zeros(grad.shape[0], grad.shape[0], device=grad.device))
+        else:
+            if group["merge_dims"]:
+                grad = self.merge_dims(grad, max_precond_dim)
+            for sh in grad.shape:
+                if sh > max_precond_dim:
+                    gg.append([])
+                else:
+                    gg.append(torch.zeros(sh, sh, device=grad.device))
+        return gg
+
+    def _clone_preconditioner_stats(self, gg):
+        gg_clone = []
+        for mat in gg:
+            if len(mat) == 0:
+                gg_clone.append([])
+            else:
+                gg_clone.append(mat.clone())
+        return gg_clone
+
+    @torch.no_grad()
+    def _update_preconditioner_stats(self, grad, gg, group, beta):
+        max_precond_dim = group["max_precond_dim"]
+        if grad.dim() == 1:
+            if (
+                group["precondition_1d"]
+                and grad.shape[0] <= max_precond_dim
+                and len(gg) > 0
+                and len(gg[0]) > 0
+            ):
+                gg[0].lerp_(grad.unsqueeze(1) @ grad.unsqueeze(0), 1 - beta)
+            return
+
+        if group["merge_dims"]:
+            grad = self.merge_dims(grad, max_precond_dim)
+        for idx, sh in enumerate(grad.shape):
+            if sh > max_precond_dim:
                 continue
-            for p in group["params"]:
-                if p.grad is None:
-                    continue
-                grad = p.grad
-                state = self.state[p]
+            if len(gg[idx]) == 0:
+                continue
+            outer_product = torch.tensordot(
+                grad,
+                grad,
+                dims=[[*chain(range(idx), range(idx + 1, len(grad.shape)))]] * 2,
+            )
+            gg[idx].lerp_(outer_product, 1 - beta)
 
-                if "step" not in state:
-                    state["step"] = 0
+    @torch.no_grad()
+    def update_preconditioner(
+        self,
+        grad,
+        state,
+        max_precond_dim=10000,
+        merge_dims=False,
+        precondition_1d=False,
+        precondition_step=None,
+    ):
+        if precondition_step is None:
+            precondition_step = state.get("step", 0)
+        if isinstance(precondition_step, torch.Tensor):
+            precondition_step = int(precondition_step.item())
 
-                if "exp_avg" not in state:
-                    state["exp_avg"] = torch.zeros_like(grad)
-                    state["exp_avg_sq"] = torch.zeros_like(grad)
-
-                if state.get("Q") is not None:
-                    state["exp_avg"] = self.project_back(
-                        state["exp_avg"],
-                        state,
-                        merge_dims=group["merge_dims"],
-                        max_precond_dim=group["max_precond_dim"],
-                    )
-
-                grad_ema = state.get("grad_ema")
-                if grad_ema is not None:
-                    grad = (1.0 - self.grad_mix_ratio) * grad + self.grad_mix_ratio * grad_ema
-
-                if state.get("GG") is None or state.get("Q") is None:
-                    self.init_preconditioner(
-                        grad,
-                        state,
-                        precondition_frequency=group["precondition_frequency"],
-                        precondition_1d=group["precondition_1d"],
-                        shampoo_beta=(group["shampoo_beta"] if group["shampoo_beta"] >= 0 else group["betas"][1]),
-                        max_precond_dim=group["max_precond_dim"],
-                        merge_dims=group["merge_dims"],
-                    )
-
-                self.update_preconditioner(
-                    grad,
-                    state,
-                    max_precond_dim=group["max_precond_dim"],
-                    merge_dims=group["merge_dims"],
-                    precondition_1d=group["precondition_1d"],
-                    precondition_step=group["precondition_frequency"],
+        if state["Q"] is not None:
+            state["exp_avg"] = self.project_back(
+                state["exp_avg"],
+                state,
+                merge_dims=merge_dims,
+                max_precond_dim=max_precond_dim,
+            )
+        if grad.dim() == 1:
+            if precondition_1d and grad.shape[0] <= max_precond_dim:
+                state["GG"][0].lerp_(
+                    grad.unsqueeze(1) @ grad.unsqueeze(0), 1 - state["shampoo_beta"]
                 )
+        else:
+            if merge_dims:
+                new_grad = self.merge_dims(grad, max_precond_dim)
+                for idx, sh in enumerate(new_grad.shape):
+                    if sh <= max_precond_dim:
+                        outer_product = torch.tensordot(
+                            new_grad,
+                            new_grad,
+                            dims=[
+                                [
+                                    *chain(
+                                        range(idx), range(idx + 1, len(new_grad.shape))
+                                    )
+                                ]
+                            ]
+                            * 2,
+                        )
+                        state["GG"][idx].lerp_(outer_product, 1 - state["shampoo_beta"])
+            else:
+                for idx, sh in enumerate(grad.shape):
+                    if sh <= max_precond_dim:
+                        outer_product = torch.tensordot(
+                            grad,
+                            grad,
+                            # Contracts across all dimensions except for k.
+                            dims=[
+                                [*chain(range(idx), range(idx + 1, len(grad.shape)))]
+                            ]
+                            * 2,
+                        )
+                        state["GG"][idx].lerp_(outer_product, 1 - state["shampoo_beta"])
+
+        if self.grad_mix_ratio > 0 and state.get("GG_ema") is not None:
+            gg_for_computation = self._clone_preconditioner_stats(state["GG"])
+            for gg_calc, gg_ema in zip(gg_for_computation, state["GG_ema"]):
+                if len(gg_calc) == 0 or len(gg_ema) == 0:
+                    continue
+                if gg_calc.shape != gg_ema.shape:
+                    continue
+                gg_calc.mul_(1.0 - self.grad_mix_ratio).add_(gg_ema, alpha=self.grad_mix_ratio)
+        else:
+            gg_for_computation = self._clone_preconditioner_stats(state["GG"])
+
+        # --- Trace Normalization ---
+        if self.trace_normalize:
+            for mat in gg_for_computation:
+                if len(mat) > 0:
+                    trace = torch.trace(mat)
+                    if trace > 1e-12:
+                        denom = trace
+                        if self.trace_normalize_mode == "mean":
+                            denom = trace / mat.shape[0]
+                        mat.div_(denom)
+        # ---------------------------
+
+        if state["Q"] is None:
+            state["Q"] = self.get_orthogonal_matrix(gg_for_computation)
+        if (
+            precondition_step > 0
+            and precondition_step % state["precondition_frequency"] == 0
+        ):
+            original_gg = state["GG"]
+            state["GG"] = gg_for_computation
+            state["Q"] = self.get_orthogonal_matrix_QR(
+                state, max_precond_dim, merge_dims
+            )
+            state["GG"] = original_gg
+            # state['Q'] = self.get_fast_QR(state, max_precond_dim, merge_dims)
+
+        if precondition_step > 0:
+            state["exp_avg"] = self.project(
+                state["exp_avg"],
+                state,
+                merge_dims=merge_dims,
+                max_precond_dim=max_precond_dim,
+            )
+
+    @torch.no_grad()
+    def update_preconditioner_from_grads(self):
+        super().update_preconditioner_from_grads()
 
     @torch.no_grad()
     def step(self, closure=None):
         for group in self.param_groups:
-            beta1, _ = group["betas"]
+            beta = group["shampoo_beta"] if group["shampoo_beta"] >= 0 else group["betas"][1]
             for p in group["params"]:
                 if p.grad is None:
                     continue
                 state = self.state[p]
-                if "grad_ema" not in state:
-                    state["grad_ema"] = torch.zeros_like(p.grad)
-                state["grad_ema"].mul_(beta1).add_(p.grad, alpha=(1.0 - beta1))
+                if "GG_ema" not in state:
+                    state["GG_ema"] = self._init_preconditioner_stats(p.grad, group)
+                self._update_preconditioner_stats(p.grad, state["GG_ema"], group, beta)
         return super().step(closure=closure)
 
 

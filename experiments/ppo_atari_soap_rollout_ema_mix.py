@@ -58,7 +58,7 @@ class Args:
     soap_trace_normalize_mode: str = "trace"
     """trace normalization mode: 'trace' or 'mean' (mean eigenvalue)"""
     soap_grad_mix_ratio: float = 0.5
-    """mix ratio for EMA gradients when building the preconditioner (0=rollout, 1=ema)"""
+    """mix ratio for EMA L/R stats when building the preconditioner (0=rollout, 1=ema)"""
     soap_update_clip_norm: float = 1.0
     """clip L2 norm for each parameter update; set <= 0 to disable"""
     num_envs: int = 8
