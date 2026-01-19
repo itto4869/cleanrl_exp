@@ -26,6 +26,7 @@ class SOAPRollout(SOAP):
         precondition_1d: bool = False,
         normalize_grads: bool = False,
         trace_normalize: bool = True,
+        trace_normalize_mode: str = "trace",
         update_clip_norm: Optional[float] = 1.0,
         data_format: str = "channels_first",
         correct_bias: bool = True,
@@ -47,6 +48,9 @@ class SOAPRollout(SOAP):
         )
         self.rollout_step = 0
         self.trace_normalize = trace_normalize
+        if trace_normalize_mode not in ("trace", "mean"):
+            raise ValueError("trace_normalize_mode must be 'trace' or 'mean'")
+        self.trace_normalize_mode = trace_normalize_mode
         self.update_clip_norm = update_clip_norm
 
     @torch.no_grad()
@@ -168,7 +172,10 @@ class SOAPRollout(SOAP):
                 if len(mat) > 0:
                     trace = torch.trace(mat)
                     if trace > 1e-12:
-                        mat.div_(trace)
+                        denom = trace
+                        if self.trace_normalize_mode == "mean":
+                            denom = trace / mat.shape[0]
+                        mat.div_(denom)
         # ---------------------------
 
         if state["Q"] is None:

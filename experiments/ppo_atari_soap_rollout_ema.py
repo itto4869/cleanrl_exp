@@ -55,6 +55,8 @@ class Args:
     """whether to normalize preconditioned gradients per layer"""
     soap_trace_normalize: bool = True
     """whether to trace-normalize the preconditioner matrices"""
+    soap_trace_normalize_mode: str = "trace"
+    """trace normalization mode: 'trace' or 'mean' (mean eigenvalue)"""
     soap_update_clip_norm: float = 1.0
     """clip L2 norm for each parameter update; set <= 0 to disable"""
     num_envs: int = 8
@@ -204,6 +206,7 @@ if __name__ == "__main__":
         normalize_grads=args.soap_normalize_grads,
         precondition_frequency=args.soap_precondition_frequency,
         trace_normalize=args.soap_trace_normalize,
+        trace_normalize_mode=args.soap_trace_normalize_mode,
         update_clip_norm=args.soap_update_clip_norm,
     )
 
