@@ -283,6 +283,87 @@ class SOAPRollout(SOAP):
         return loss
 
 
+class SOAPRolloutMix(SOAPRollout):
+    """
+    SOAP rollout variant that mixes rollout gradients with a persistent EMA of per-step gradients
+    when building the preconditioner.
+    """
+
+    def __init__(self, *args, grad_mix_ratio: float = 0.5, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not 0.0 <= grad_mix_ratio <= 1.0:
+            raise ValueError("grad_mix_ratio must be in [0, 1]")
+        self.grad_mix_ratio = grad_mix_ratio
+
+    @torch.no_grad()
+    def update_preconditioner_from_grads(self):
+        """
+        Recompute the preconditioner from mixed gradients.
+        Mixes rollout gradients with EMA of per-step raw gradients.
+        """
+        self.rollout_step += 1
+        for group in self.param_groups:
+            if self.rollout_step % group["precondition_frequency"] != 0:
+                continue
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                grad = p.grad
+                state = self.state[p]
+
+                if "step" not in state:
+                    state["step"] = 0
+
+                if "exp_avg" not in state:
+                    state["exp_avg"] = torch.zeros_like(grad)
+                    state["exp_avg_sq"] = torch.zeros_like(grad)
+
+                if state.get("Q") is not None:
+                    state["exp_avg"] = self.project_back(
+                        state["exp_avg"],
+                        state,
+                        merge_dims=group["merge_dims"],
+                        max_precond_dim=group["max_precond_dim"],
+                    )
+
+                grad_ema = state.get("grad_ema")
+                if grad_ema is not None:
+                    grad = (1.0 - self.grad_mix_ratio) * grad + self.grad_mix_ratio * grad_ema
+
+                if state.get("GG") is None or state.get("Q") is None:
+                    self.init_preconditioner(
+                        grad,
+                        state,
+                        precondition_frequency=group["precondition_frequency"],
+                        precondition_1d=group["precondition_1d"],
+                        shampoo_beta=(group["shampoo_beta"] if group["shampoo_beta"] >= 0 else group["betas"][1]),
+                        max_precond_dim=group["max_precond_dim"],
+                        merge_dims=group["merge_dims"],
+                    )
+
+                self.update_preconditioner(
+                    grad,
+                    state,
+                    max_precond_dim=group["max_precond_dim"],
+                    merge_dims=group["merge_dims"],
+                    precondition_1d=group["precondition_1d"],
+                    precondition_step=group["precondition_frequency"],
+                )
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        for group in self.param_groups:
+            beta1, _ = group["betas"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                state = self.state[p]
+                if "grad_ema" not in state:
+                    state["grad_ema"] = torch.zeros_like(p.grad)
+                state["grad_ema"].mul_(beta1).add_(p.grad, alpha=(1.0 - beta1))
+        return super().step(closure=closure)
+
+
 class SOAPRolloutResetStats(SOAPRollout):
     """
     SOAP rollout variant that resets optimizer statistics each rollout
