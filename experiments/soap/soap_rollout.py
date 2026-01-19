@@ -289,11 +289,20 @@ class SOAPRolloutMix(SOAPRollout):
     with a persistent EMA of per-step preconditioner statistics.
     """
 
-    def __init__(self, *args, grad_mix_ratio: float = 0.5, **kwargs):
+    def __init__(
+        self,
+        *args,
+        grad_mix_ratio: float = 0.5,
+        mix_normalize_mode: str = "none",
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         if not 0.0 <= grad_mix_ratio <= 1.0:
             raise ValueError("grad_mix_ratio must be in [0, 1]")
+        if mix_normalize_mode not in ("none", "rollout", "both"):
+            raise ValueError("mix_normalize_mode must be 'none', 'rollout', or 'both'")
         self.grad_mix_ratio = grad_mix_ratio
+        self.mix_normalize_mode = mix_normalize_mode
 
     @torch.no_grad()
     def _init_preconditioner_stats(self, grad, group):
@@ -322,6 +331,18 @@ class SOAPRolloutMix(SOAPRollout):
             else:
                 gg_clone.append(mat.clone())
         return gg_clone
+
+    def _trace_normalize_stats(self, gg):
+        for mat in gg:
+            if len(mat) == 0:
+                continue
+            trace = torch.trace(mat)
+            if trace <= 1e-12:
+                continue
+            denom = trace
+            if self.trace_normalize_mode == "mean":
+                denom = trace / mat.shape[0]
+            mat.div_(denom)
 
     @torch.no_grad()
     def _update_preconditioner_stats(self, grad, gg, group, beta):
@@ -409,27 +430,25 @@ class SOAPRolloutMix(SOAPRollout):
                         )
                         state["GG"][idx].lerp_(outer_product, 1 - state["shampoo_beta"])
 
-        if self.grad_mix_ratio > 0 and state.get("GG_ema") is not None:
-            gg_for_computation = self._clone_preconditioner_stats(state["GG"])
-            for gg_calc, gg_ema in zip(gg_for_computation, state["GG_ema"]):
+        gg_for_computation = self._clone_preconditioner_stats(state["GG"])
+        gg_ema_for_mix = state.get("GG_ema")
+        if self.mix_normalize_mode in ("rollout", "both"):
+            self._trace_normalize_stats(gg_for_computation)
+        if gg_ema_for_mix is not None and self.mix_normalize_mode == "both":
+            gg_ema_for_mix = self._clone_preconditioner_stats(gg_ema_for_mix)
+            self._trace_normalize_stats(gg_ema_for_mix)
+
+        if self.grad_mix_ratio > 0 and gg_ema_for_mix is not None:
+            for gg_calc, gg_ema in zip(gg_for_computation, gg_ema_for_mix):
                 if len(gg_calc) == 0 or len(gg_ema) == 0:
                     continue
                 if gg_calc.shape != gg_ema.shape:
                     continue
                 gg_calc.mul_(1.0 - self.grad_mix_ratio).add_(gg_ema, alpha=self.grad_mix_ratio)
-        else:
-            gg_for_computation = self._clone_preconditioner_stats(state["GG"])
 
         # --- Trace Normalization ---
         if self.trace_normalize:
-            for mat in gg_for_computation:
-                if len(mat) > 0:
-                    trace = torch.trace(mat)
-                    if trace > 1e-12:
-                        denom = trace
-                        if self.trace_normalize_mode == "mean":
-                            denom = trace / mat.shape[0]
-                        mat.div_(denom)
+            self._trace_normalize_stats(gg_for_computation)
         # ---------------------------
 
         if state["Q"] is None:

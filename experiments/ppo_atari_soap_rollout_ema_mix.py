@@ -59,6 +59,8 @@ class Args:
     """trace normalization mode: 'trace' or 'mean' (mean eigenvalue)"""
     soap_grad_mix_ratio: float = 0.5
     """mix ratio for EMA L/R stats when building the preconditioner (0=rollout, 1=ema)"""
+    soap_mix_normalize_mode: str = "none"
+    """pre-mix normalization: 'none', 'rollout', or 'both'"""
     soap_update_clip_norm: float = 1.0
     """clip L2 norm for each parameter update; set <= 0 to disable"""
     num_envs: int = 8
@@ -210,6 +212,7 @@ if __name__ == "__main__":
         trace_normalize=args.soap_trace_normalize,
         trace_normalize_mode=args.soap_trace_normalize_mode,
         grad_mix_ratio=args.soap_grad_mix_ratio,
+        mix_normalize_mode=args.soap_mix_normalize_mode,
         update_clip_norm=args.soap_update_clip_norm,
     )
 
