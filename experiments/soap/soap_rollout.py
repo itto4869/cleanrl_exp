@@ -1,5 +1,7 @@
-import torch
 from itertools import chain
+from typing import Optional
+
+import torch
 
 from experiments.soap.soap import SOAP
 
@@ -23,6 +25,8 @@ class SOAPRollout(SOAP):
         merge_dims: bool = False,
         precondition_1d: bool = False,
         normalize_grads: bool = False,
+        trace_normalize: bool = True,
+        update_clip_norm: Optional[float] = 1.0,
         data_format: str = "channels_first",
         correct_bias: bool = True,
     ):
@@ -42,6 +46,8 @@ class SOAPRollout(SOAP):
             correct_bias=correct_bias,
         )
         self.rollout_step = 0
+        self.trace_normalize = trace_normalize
+        self.update_clip_norm = update_clip_norm
 
     @torch.no_grad()
     def update_preconditioner_from_grads(self):
@@ -157,11 +163,12 @@ class SOAPRollout(SOAP):
                         state["GG"][idx].lerp_(outer_product, 1 - state["shampoo_beta"])
 
         # --- Trace Normalization ---
-        for mat in state["GG"]:
-            if len(mat) > 0:
-                trace = torch.trace(mat)
-                if trace > 1e-12:
-                    mat.div_(trace)
+        if self.trace_normalize:
+            for mat in state["GG"]:
+                if len(mat) > 0:
+                    trace = torch.trace(mat)
+                    if trace > 1e-12:
+                        mat.div_(trace)
         # ---------------------------
 
         if state["Q"] is None:
@@ -256,11 +263,10 @@ class SOAPRollout(SOAP):
                 
                 # --- Update Clipping (added) ---
                 update = -step_size * norm_grad
-                max_update_norm = 1.0  # Optional: Make this configurable
-                update_norm = update.norm()
-                if update_norm > max_update_norm:
-                    update = update * (max_update_norm / update_norm)
-                
+                if self.update_clip_norm is not None and self.update_clip_norm > 0:
+                    update_norm = update.norm()
+                    if update_norm > self.update_clip_norm:
+                        update = update * (self.update_clip_norm / update_norm)
                 p.add_(update)
                 # -------------------------------
 

@@ -53,12 +53,18 @@ class Args:
     """how often to recompute the preconditioner (in rollouts)"""
     soap_normalize_grads: bool = False
     """whether to normalize preconditioned gradients per layer"""
+    soap_trace_normalize: bool = True
+    """whether to trace-normalize the preconditioner matrices"""
+    soap_update_clip_norm: float = 1.0
+    """clip L2 norm for each parameter update; set <= 0 to disable"""
     num_envs: int = 8
     """the number of parallel game environments"""
     num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
+    warmup_steps: int = 0
+    """number of environment steps to linearly warm up the learning rate"""
     gamma: float = 0.99
     """the discount factor gamma"""
     gae_lambda: float = 0.95
@@ -197,6 +203,8 @@ if __name__ == "__main__":
         lr=args.learning_rate,
         normalize_grads=args.soap_normalize_grads,
         precondition_frequency=args.soap_precondition_frequency,
+        trace_normalize=args.soap_trace_normalize,
+        update_clip_norm=args.soap_update_clip_norm,
     )
 
     # ALGO Logic: Storage setup
@@ -215,11 +223,16 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
 
     for iteration in range(1, args.num_iterations + 1):
-        # Annealing the rate if instructed to do so.
-        if args.anneal_lr:
-            frac = 1.0 - (iteration - 1.0) / args.num_iterations
-            lrnow = frac * args.learning_rate
-            optimizer.param_groups[0]["lr"] = lrnow
+        # Warmup + annealing schedule (step-based).
+        progress = min(global_step, args.total_timesteps)
+        if args.warmup_steps > 0 and progress < args.warmup_steps:
+            lrnow = args.learning_rate * (progress / args.warmup_steps)
+        else:
+            lrnow = args.learning_rate
+            if args.anneal_lr:
+                remaining = max(args.total_timesteps - args.warmup_steps, 1)
+                lrnow = lrnow * (1.0 - (progress - args.warmup_steps) / remaining)
+        optimizer.param_groups[0]["lr"] = max(lrnow, 0.0)
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
