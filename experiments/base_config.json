@@ -1,0 +1,51 @@
+{
+    "adam": {
+        "learning-rate": 2.5e-4,
+        "ppo": {
+            "gamma": 0.99,
+            "gae-lambda": 0.95,
+            "num-envs": 8,
+            "num-steps": 128,
+            "num-minibatches": 4,
+            "update-epochs": 4,
+            "anneal-lr": true,
+            "norm-adv": true,
+            "clip-coef": 0.1,
+            "clip-vloss": true,
+            "ent-coef": 0.01,
+            "vf-coef": 0.5,
+            "max-grad-norm": 0.5
+        }
+    },
+    "soap": {
+        "learning-rate": 2.5e-3,
+        "soap-precondition-frequency": 4,
+        "ppo": {
+            "gamma": 0.99,
+            "gae-lambda": 0.95,
+            "num-envs": 8,
+            "num-steps": 128,
+            "num-minibatches": 4,
+            "update-epochs": 1,
+            "anneal-lr": true,
+            "norm-adv": true,
+            "clip-coef": 0.1,
+            "clip-vloss": true,
+            "ent-coef": 0.01,
+            "vf-coef": 0.5,
+            "max-grad-norm": 0.5
+        }
+    },
+    "envs": [
+        "ale_py:AmidarNoFrameskip-v4", 
+        "ale_py:BowlingNoFrameskip-v4", 
+        "ale_py:FrostbiteNoFrameskip-v4", 
+        "ale_py:KungFuMasterNoFrameskip-v4", 
+        "ale_py:RiverraidNoFrameskip-v4",
+        "ale_py:BattleZoneNoFrameskip-v4", 
+        "ale_py:DoubleDunkNoFrameskip-v4", 
+        "ale_py:NameThisGameNoFrameskip-v4", 
+        "ale_py:PhoenixNoFrameskip-v4", 
+        "ale_py:QbertNoFrameskip-v4"
+    ]
+}
