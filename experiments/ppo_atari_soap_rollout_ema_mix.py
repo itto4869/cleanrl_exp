@@ -349,6 +349,7 @@ if __name__ == "__main__":
         full_entropy_loss = full_entropy.mean()
         full_loss = full_pg_loss - args.ent_coef * full_entropy_loss + full_v_loss * args.vf_coef
         full_loss.backward()
+        nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
         optimizer.update_preconditioner_from_grads()
         optimizer.zero_grad()
 
