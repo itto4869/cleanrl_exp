@@ -250,17 +250,11 @@ if __name__ == "__main__":
         optimizer.update_preconditioner_from_grads()
 
         rollout_norm, ema_norm, mixed_norm = compute_precond_norms(optimizer)
-        print(
-            f"[rollout {rollout_idx}] "
-            f"grad_norm_used={grad_norm:.6g} "
-            f"rollout_precond_norm={rollout_norm:.6g} "
-            f"ema_precond_norm={ema_norm:.6g} "
-            f"mixed_precond_norm={mixed_norm:.6g}"
-        )
 
         optimizer.zero_grad()
 
         b_inds = np.arange(args.batch_size)
+        update_norms = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):
@@ -300,6 +294,26 @@ if __name__ == "__main__":
                 loss.backward()
                 if args.max_grad_norm > 0:
                     nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                with torch.no_grad():
+                    params_before = [p.detach().clone() for p in agent.parameters()]
                 optimizer.step()
+                with torch.no_grad():
+                    delta_sq = 0.0
+                    for p0, p1 in zip(params_before, agent.parameters()):
+                        d = p1.detach() - p0
+                        delta_sq += d.pow(2).sum().item()
+                    update_norms.append(delta_sq**0.5)
+
+        update_norm_mean = float(np.mean(update_norms)) if update_norms else float("nan")
+        update_norm_max = float(np.max(update_norms)) if update_norms else float("nan")
+        print(
+            f"[rollout {rollout_idx}] "
+            f"grad_norm_used={grad_norm:.6g} "
+            f"rollout_precond_norm={rollout_norm:.6g} "
+            f"ema_precond_norm={ema_norm:.6g} "
+            f"mixed_precond_norm={mixed_norm:.6g} "
+            f"update_norm_mean={update_norm_mean:.6g} "
+            f"update_norm_max={update_norm_max:.6g}"
+        )
 
     envs.close()
