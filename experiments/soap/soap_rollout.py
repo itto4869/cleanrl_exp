@@ -294,7 +294,6 @@ class SOAPRolloutMix(SOAPRollout):
         *args,
         grad_mix_ratio: float = 0.5,
         mix_normalize_mode: str = "none",
-        reset_rollout_stats: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -304,7 +303,6 @@ class SOAPRolloutMix(SOAPRollout):
             raise ValueError("mix_normalize_mode must be 'none', 'rollout', or 'both'")
         self.grad_mix_ratio = grad_mix_ratio
         self.mix_normalize_mode = mix_normalize_mode
-        self.reset_rollout_stats = reset_rollout_stats
 
     @torch.no_grad()
     def _init_preconditioner_stats(self, grad, group):
@@ -478,18 +476,6 @@ class SOAPRolloutMix(SOAPRollout):
     @torch.no_grad()
     def update_preconditioner_from_grads(self):
         super().update_preconditioner_from_grads()
-        if self.reset_rollout_stats:
-            for group in self.param_groups:
-                for p in group["params"]:
-                    state = self.state.get(p)
-                    if not state:
-                        continue
-                    if "exp_avg" in state:
-                        state["exp_avg"].zero_()
-                    if "exp_avg_sq" in state:
-                        state["exp_avg_sq"].zero_()
-                    if "step" in state:
-                        state["step"] = 0
 
     @torch.no_grad()
     def step(self, closure=None):
