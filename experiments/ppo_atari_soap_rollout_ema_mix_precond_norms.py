@@ -164,6 +164,8 @@ if __name__ == "__main__":
         mix_normalize_mode=args.soap_mix_normalize_mode,
         update_clip_norm=args.soap_update_clip_norm,
     )
+    named_params = list(agent.named_parameters())
+    param_list = [p for _, p in named_params]
 
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
@@ -255,6 +257,7 @@ if __name__ == "__main__":
 
         b_inds = np.arange(args.batch_size)
         update_norms = []
+        per_layer_updates = {name: [] for name, _ in named_params}
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):
@@ -295,12 +298,13 @@ if __name__ == "__main__":
                 if args.max_grad_norm > 0:
                     nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 with torch.no_grad():
-                    params_before = [p.detach().clone() for p in agent.parameters()]
+                    params_before = [p.detach().clone() for p in param_list]
                 optimizer.step()
                 with torch.no_grad():
                     delta_sq = 0.0
-                    for p0, p1 in zip(params_before, agent.parameters()):
+                    for (name, p1), p0 in zip(named_params, params_before):
                         d = p1.detach() - p0
+                        per_layer_updates[name].append(float(d.pow(2).sum().sqrt().item()))
                         delta_sq += d.pow(2).sum().item()
                     update_norms.append(delta_sq**0.5)
 
@@ -315,5 +319,10 @@ if __name__ == "__main__":
             f"update_norm_mean={update_norm_mean:.6g} "
             f"update_norm_max={update_norm_max:.6g}"
         )
+        for name in sorted(per_layer_updates.keys()):
+            values = per_layer_updates[name]
+            layer_mean = float(np.mean(values)) if values else float("nan")
+            layer_max = float(np.max(values)) if values else float("nan")
+            print(f"  [layer] {name} update_norm_mean={layer_mean:.6g} update_norm_max={layer_max:.6g}")
 
     envs.close()
